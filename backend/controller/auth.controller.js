@@ -4,6 +4,7 @@ generation and verification, and a User model for interacting with user data. */
 import passport from "passport";
 import jwt from "jsonwebtoken";
 import bcrypt from "bcryptjs";
+import logger from "../utils/logger.js";
 
 import User from "../models/User.js";
 import UserProfile from "../models/profile.model.js";
@@ -105,6 +106,8 @@ export const logout = (req, res, next) => {
 
 export const current_user = (req, res) => {
   try {
+    logger.info({ jwtSecret: process.env.JWT_SECRET }, "Loaded JWT secret for current_user");
+
     if (req.user) {
       return res.status(200).json(req.user);
     } else {
@@ -227,15 +230,19 @@ export const Signup = async (req, res) => {
       // Create Initial Session
       await Session.create({
         userId: newUser._id,
-        title: "",
-        description: "",
+        title: "My First Session",
+        description: "Auto created session",
+        creator: newUser._id,
+        sessionId: crypto.randomUUID(),
         aiSummary: "",
       });
     } catch (err) {
       // Rollback: delete user & profile if session creation fails
       await User.deleteOne({ _id: newUser._id });
       await UserProfile.deleteOne({ userId: newUser._id });
-      return res.status(500).json({ message: "Failed to create user profile" });
+      return res
+        .status(500)
+        .json({ message: "Failed to create user profile", error: err.message });
     }
 
     const token = jwt.sign(payload, process.env.JWT_SECRET, {
@@ -293,4 +300,3 @@ export const UpdatePassword = async (req, res) => {
     return res.status(500).json({ message: "Internal server error" });
   }
 };
-

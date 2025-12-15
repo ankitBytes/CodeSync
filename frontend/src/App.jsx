@@ -39,13 +39,8 @@ function App() {
     () => (mode === "dark" ? darkTheme : lightTheme),
     [mode]
   );
-  // const socket = io("ws://localhost:3000");
   const [currentUser, setCurrentUser] = useState(null);
   const [isLoading, setIsLoading] = useState(true);
-
-  // socket.on("connect", () => {
-  //   console.log("Socket.Io connected successfully");
-  // });
 
   useEffect(() => {
     const checkAuth = async () => {

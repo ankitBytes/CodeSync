@@ -4,44 +4,49 @@ import session from "express-session";
 import passport from "passport";
 import cors from "cors";
 import mongoose from "mongoose";
-import "./config/passport.js";
 import cookieParser from "cookie-parser";
-import "./config/cloudinary.js"; // Ensure cloudinary is configured
 import helmet from "helmet";
 import rateLimit from "express-rate-limit";
 import MongoStore from "connect-mongo";
+import { createServer } from "http";
 
-// Routes
+import "./config/passport.js";
+import "./config/cloudinary.js";
+import { setupSocket } from "./config/socket.io.js";
+
 import authRoutes from "./routes/auth.js";
 import profileRoutes from "./routes/profile.js";
 import sessionRoutes from "./routes/session.route.js";
 
+import httpLogger from "./middleware/httpLogger.js";
+import errorHandler from "./middleware/errorHandler.js";
+import logger from "./utils/logger.js";
+
 dotenv.config();
 
 const app = express();
+const httpServer = createServer(app);
+setupSocket(httpServer);
+
 const isProduction = process.env.NODE_ENV === "production";
 const PORT = process.env.PORT || 3000;
 
-// ✅ Validate required environment variables
 const requiredEnvVars = [
   "MONGO_URI",
   "JWT_SECRET",
   "SESSION_SECRET",
   "GOOGLE_CLIENT_ID",
   "GOOGLE_CLIENT_SECRET",
-  "CLIENT_URL"
+  "CLIENT_URL",
 ];
 
 for (const envVar of requiredEnvVars) {
   if (!process.env[envVar]) {
-    console.error(`❌ Missing required environment variable: ${envVar}`);
+    logger.fatal(`Missing required environment variable: ${envVar}`);
     process.exit(1);
-  } else {
-    console.log(`✅ Found environment variable: ${envVar}`);
   }
 }
-
-// ✅ CORS configuration
+//CORS setup
 app.use(
   cors({
     origin: isProduction ? process.env.CLIENT_URL : "http://localhost:5173",
@@ -49,22 +54,24 @@ app.use(
   })
 );
 
-// ✅ Security headers
 app.use(
   helmet({
-    crossOriginResourcePolicy: false, // allow serving resources to different origins
+    crossOriginResourcePolicy: false,
   })
 );
 
-// ✅ General rate limiting (not for auth)
+// HTTP request logging
+app.use(httpLogger);
+
+// Rate limiting
 const limiter = rateLimit({
-  windowMs: 15 * 60 * 1000, // 15 minutes
+  windowMs: 15 * 60 * 1000,
   max: isProduction ? 200 : 100,
   message: "Too many requests from this IP, please try again later.",
 });
 app.use(limiter);
 
-// ✅ Session configuration
+// Sessions
 app.use(
   session({
     secret: process.env.SESSION_SECRET,
@@ -73,47 +80,59 @@ app.use(
     store: MongoStore.create({
       mongoUrl: process.env.MONGO_URI,
       collectionName: "sessions",
-      ttl: 24 * 60 * 60, // 1 day
+      ttl: 24 * 60 * 60,
     }),
     cookie: {
       httpOnly: true,
-      secure: isProduction, // true only in production (HTTPS)
-      sameSite: isProduction ? "None" : "Lax", // "None" for cross-domain
-      maxAge: 24 * 60 * 60 * 1000, // 1 day
+      secure: isProduction,
+      sameSite: isProduction ? "None" : "Lax",
+      maxAge: 24 * 60 * 60 * 1000,
     },
   })
 );
 
-// ✅ Middleware setup
+// Auth & parsing
 app.use(passport.initialize());
 app.use(passport.session());
 app.use(express.json({ limit: "10mb" }));
 app.use(cookieParser());
 
-// ✅ Routes
+app.get("/health", (req, res) => {
+  res.status(200).json({
+    status: "ok",
+    uptime: process.uptime(),
+    timestamp: new Date().toISOString(),
+    mongo:
+      mongoose.connection.readyState === 1 ? "connected" : "disconnected",
+  });
+});
+
 app.use("/auth", authRoutes);
 app.use("/user", profileRoutes);
 app.use("/session", sessionRoutes);
 
-// ✅ Root route
-app.get("/", (req, res) => {
-  res.send("Welcome to the CodeSync API");
+app.use(errorHandler);
+
+process.on("unhandledRejection", (reason) => {
+  logger.fatal({ reason }, "Unhandled Promise Rejection");
+  process.exit(1);
 });
 
-// ✅ Connect to MongoDB first, then start the server
+process.on("uncaughtException", (err) => {
+  logger.fatal(err, "Uncaught Exception");
+  process.exit(1);
+});
+
 mongoose
-  .connect(process.env.MONGO_URI, {
-    useNewUrlParser: true,
-    useUnifiedTopology: true,
-  })
+  .connect(process.env.MONGO_URI)
   .then(() => {
-    console.log("✅ MongoDB connected successfully");
-    app.listen(PORT, () => {
-      console.log(`🚀 Server running on port ${PORT}`);
-      console.log(`🌍 Environment: ${process.env.NODE_ENV || "development"}`);
+    logger.info("MongoDB connected successfully");
+
+    httpServer.listen(PORT, () => {
+      logger.info(`Server (HTTP + WebSocket) running on port ${PORT}`);
     });
   })
   .catch((err) => {
-    console.error("❌ MongoDB connection error:", err);
+    logger.fatal(err, "MongoDB connection error");
     process.exit(1);
   });

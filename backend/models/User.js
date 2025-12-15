@@ -46,13 +46,13 @@ const userSchema = new mongoose.Schema({
     currentStreak: { type: Number, default: 0 },
     longestStreak: { type: Number, default: 0 },
     lastActive: { type: Date, default: Date.now },
-    totalTimeSpent: { type: Number, default: 0 }, // in minutes
-    averageSolveTime: { type: Number, default: 0 }, // in minutes
+    totalTimeSpent: { type: Number, default: 0 }, 
+    averageSolveTime: { type: Number, default: 0 },
     submissions: { type: Number, default: 0 },
     acceptedSubmissions: { type: Number, default: 0 }
   },
   
-  // Skill levels by category
+  // Skill levels
   skills: {
     arrays: { type: Number, default: 0, min: 0, max: 100 },
     strings: { type: Number, default: 0, min: 0, max: 100 },
@@ -64,14 +64,14 @@ const userSchema = new mongoose.Schema({
     bitManipulation: { type: Number, default: 0, min: 0, max: 100 }
   },
   
-  // Programming languages proficiency
+  // Programming languages
   languages: [{
     name: { type: String, required: true },
     proficiency: { type: Number, min: 1, max: 5, default: 1 },
     problemsSolved: { type: Number, default: 0 }
   }],
   
-  // Collaboration preferences and settings
+  // Collaboration preferences
   collaborationSettings: {
     allowPairProgramming: { type: Boolean, default: true },
     allowCodeReview: { type: Boolean, default: true },
@@ -100,7 +100,7 @@ const userSchema = new mongoose.Schema({
   mentors: [{ type: mongoose.Schema.Types.ObjectId, ref: 'User' }],
   mentees: [{ type: mongoose.Schema.Types.ObjectId, ref: 'User' }],
   
-  // Achievements and badges
+  // Achievements
   achievements: [{
     name: { type: String, required: true },
     description: { type: String },
@@ -129,83 +129,75 @@ const userSchema = new mongoose.Schema({
   toObject: { virtuals: true }
 });
 
-// Virtual for full profile URL
+
+// ---------- Virtuals ----------
 userSchema.virtual('profileUrl').get(function() {
   return `/user/${this.username}`;
 });
 
-// Virtual for acceptance rate
 userSchema.virtual('acceptanceRate').get(function() {
   if (this.stats.submissions === 0) return 0;
   return Math.round((this.stats.acceptedSubmissions / this.stats.submissions) * 100);
 });
 
-// Virtual for total followers count
 userSchema.virtual('followersCount').get(function() {
   return this.followers.length;
 });
 
-// Virtual for total following count
 userSchema.virtual('followingCount').get(function() {
   return this.following.length;
 });
 
-// Indexes for better query performance
-userSchema.index({ email: 1 });
-userSchema.index({ username: 1 });
+
+// ---------- Indexes (ONLY the needed ones) ----------
 userSchema.index({ 'stats.problemsSolved': -1 });
 userSchema.index({ 'stats.totalScore': -1 });
 userSchema.index({ 'stats.streakDays': -1 });
 
-// Password hashing middleware
+
+// ---------- Password hashing ----------
 userSchema.pre("save", async function (next) {
   if (!this.isModified("password")) return next();
   
   try {
-    this.password = await bcrypt.hash(this.password, 12); // Increased from 10 to 12 for better security
+    this.password = await bcrypt.hash(this.password, 12);
     next();
   } catch (error) {
     next(error);
   }
 });
 
-// Method to compare passwords
+
+// ---------- Methods ----------
 userSchema.methods.comparePassword = async function(candidatePassword) {
-  try {
-    return await bcrypt.compare(candidatePassword, this.password);
-  } catch (error) {
-    throw new Error('Password comparison failed');
-  }
+  return bcrypt.compare(candidatePassword, this.password);
 };
 
-// Method to update stats
 userSchema.methods.updateStats = function(problemSolved = false, timeSpent = 0, submissionAccepted = false) {
   if (problemSolved) {
     this.stats.problemsSolved += 1;
     this.stats.streakDays += 1;
     this.stats.currentStreak += 1;
-    
     if (this.stats.currentStreak > this.stats.longestStreak) {
       this.stats.longestStreak = this.stats.currentStreak;
     }
   }
-  
+
   if (timeSpent > 0) {
     this.stats.totalTimeSpent += timeSpent;
     this.stats.averageSolveTime = Math.round(this.stats.totalTimeSpent / this.stats.problemsSolved);
   }
-  
+
   if (submissionAccepted) {
     this.stats.acceptedSubmissions += 1;
   }
-  
+
   this.stats.submissions += 1;
   this.stats.lastActive = new Date();
-  
+
   return this.save();
 };
 
-// Method to reset streak if user hasn't been active
 userSchema.methods.checkAndResetStreak = function() {
   const now = new Date();
   const lastActive = new Date(this.stats.lastActive);
@@ -215,8 +207,9 @@ userSchema.methods.checkAndResetStreak = function() {
     this.stats.currentStreak = 0;
     this.stats.streakDays = 0;
   }
-  
+
   return this.save();
 };
+
 
 export default mongoose.model("User", userSchema);

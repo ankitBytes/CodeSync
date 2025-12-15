@@ -71,7 +71,7 @@ const mockChatMessages = [
 
 const Chat = () => {
   const [chatMessage, setChatMessage] = useState("");
-  const socket = io("ws://localhost:3000");
+  // const socket = io("ws://localhost:3000");
 
   // Handle chat message
   const handleSendMessage = () => {

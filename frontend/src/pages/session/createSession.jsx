@@ -67,7 +67,7 @@ const CreateSession = () => {
 
     try {
       const response = await fetch(apiUrl("/session/create-session"), {
-        method: "PATCH",
+        method: "POST",
         headers: {
           "Content-Type": "application/json",
         },
