@@ -102,6 +102,9 @@ const SessionNavbar = () => {
   const elementRef = useRef(null);
   const dispatch = useDispatch();
 
+  const session = useSelector((state) => state.session.currentSession);
+  console.log(session);
+
   // Handle code execution
   const handleRunCode = () => {
     setIsRunning(true);
@@ -225,12 +228,18 @@ const SessionNavbar = () => {
 
             <Box sx={{ display: "flex", alignItems: "center", gap: 1 }}>
               <AvatarGroup
+                min={1}
                 max={3}
                 sx={{ "& .MuiAvatar-root": { width: 32, height: 32 } }}
               >
-                <Avatar sx={{ bgcolor: "#00ff88", color: "#000" }}>A</Avatar>
-                <Avatar sx={{ bgcolor: "#ff6b6b", color: "#fff" }}>B</Avatar>
-                <Avatar sx={{ bgcolor: "#4ecdc4", color: "#fff" }}>Y</Avatar>
+                {session.participants.map((participant, index) => (
+                  <Avatar
+                    key={index}
+                    sx={{ bgcolor: "#00ff88", color: "#000" }}
+                  >
+                    {participant?.name?.charAt(0).toUpperCase()}
+                  </Avatar>
+                ))}
               </AvatarGroup>
 
               <Tooltip title="Run Code">

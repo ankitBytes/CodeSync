@@ -1,9 +1,23 @@
 import React, { useState, useEffect, use } from "react";
-import { Box, Container, Grid, Stack, Alert, Snackbar, Typography } from "@mui/material";
+import {
+  Box,
+  Container,
+  Grid,
+  Stack,
+  Alert,
+  Snackbar,
+  Typography,
+} from "@mui/material";
 import { useParams } from "react-router-dom";
 import { apiUrl } from "../../utils/api.js";
-import { useDispatch } from "react-redux";
+import { useDispatch, useSelector } from "react-redux";
 import { sessionCreated, clearSession } from "../../redux/sessionSlice.js";
+import { useSocket } from "../../utils/socketContext.jsx";
+import {
+  requestStarted,
+  requestFinished,
+  resetLoading,
+} from "../../redux/loadingSlice.js";
 
 // different components
 import SessionNavbar from "../../components/session/sessionNavbar";
@@ -21,6 +35,8 @@ const Session = () => {
     severity: "info",
   });
   const [isSessionValid, setIsSessionValid] = useState(false);
+  const socket = useSocket();
+  const session = useSelector((state) => state.session.currentSession);
 
   // Close snackbar
   const handleCloseSnackbar = () => {
@@ -28,12 +44,13 @@ const Session = () => {
   };
 
   useEffect(() => {
-    if (!sessionId) return;
+    if (!sessionId || !socket) return;
 
-    let cancelled = false;
+    let joined = false;
 
     const verifySession = async () => {
       try {
+        dispatch(requestStarted());
         const response = await fetch(
           apiUrl(`/session/verify-session/${sessionId}`),
           {
@@ -47,12 +64,29 @@ const Session = () => {
         }
 
         const data = await response.json();
-        setIsSessionValid(true);
-        if (cancelled) return;
-
-        console.log(data.session);  
 
         dispatch(sessionCreated(data.session));
+        setIsSessionValid(true);
+
+        socket.emit(
+          "session:join",
+          {
+            sessionId: data.session.sessionId,
+            clientId: socket.id,
+            userId: data.session.userId,
+            name: data.session.name,
+          },
+          (ack) => {
+            if (!ack?.ok) {
+              throw new Error(ack?.error || "Socket join failed");
+            }
+            joined = true;
+          }
+        );
+
+        dispatch(requestFinished());
+        dispatch(resetLoading());
+
         setSnackbar({
           open: true,
           severity: "success",
@@ -60,11 +94,10 @@ const Session = () => {
         });
         setTimeout(() => {
           dispatch(hideNotification());
-        }, 3000);
+        }, 2000);
       } catch (error) {
-        if (cancelled) return;
-
         dispatch(clearSession());
+
         setSnackbar({
           open: true,
           severity: "error",
@@ -72,14 +105,19 @@ const Session = () => {
         });
         setTimeout(() => {
           dispatch(hideNotification());
-        }, 3000);
+        }, 2000);
       }
     };
 
     verifySession();
 
     return () => {
-      cancelled = true;
+      if (joined) {
+        socket.emit("session:leave", {
+          sessionId,
+          clientId: socket.id,
+        });
+      }
     };
   }, [sessionId, dispatch]);
 
@@ -128,7 +166,9 @@ const Session = () => {
       ) : (
         <>
           {" "}
-          <Typography color="white" variant="h4" align="center">Invalid Session</Typography>
+          <Typography color="white" variant="h4" align="center">
+            Invalid Session
+          </Typography>
         </>
       )}
       {/* Session Header */}

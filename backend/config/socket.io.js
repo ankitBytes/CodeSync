@@ -1,6 +1,8 @@
 import { Server } from "socket.io";
 import Session from "../models/session.model.js";
 import User from "../models/User.js";
+import logger from "../utils/logger.js";
+import { SocketAuthMiddleware } from "../middleware/authMiddleware.js";
 
 const activeSessions = {};   // in-memory live state for fast sync
 const chatBuffer = {};       // in-memory chat cache (optional)
@@ -18,13 +20,12 @@ export function setupSocket(server) {
     transports: ["websocket"]
   });
 
-  io.on("connection", (socket) => {
-    console.log("🔌 Client connected:", socket.id);
+  io.use(SocketAuthMiddleware);
 
-    // ------------------------------------------------------
-    // JOIN SESSION
-    // ------------------------------------------------------
-    socket.on("session:join", async ({ sessionId, clientId, userId, name }, ack) => {
+  io.on("connection", (socket) => {
+    logger.info("🔌 Client connected:", socket.id);
+    socket.on("session:join", async ({ sessionId, clientId, name }, ack) => {
+      const userId = socket.user.id;
       try {
         socket.join(sessionId);
 
@@ -74,9 +75,6 @@ export function setupSocket(server) {
       }
     });
 
-    // ------------------------------------------------------
-    // LEAVE SESSION
-    // ------------------------------------------------------
     socket.on("session:leave", async ({ sessionId, clientId, userId }) => {
       try {
         socket.leave(sessionId);
@@ -100,9 +98,6 @@ export function setupSocket(server) {
       }
     });
 
-    // ------------------------------------------------------
-    // CODE CHANGE (REALTIME + DATABASE)
-    // ------------------------------------------------------
     socket.on(
       "session:code:change",
       async ({ sessionId, clientId, userId, code, language }) => {
@@ -129,9 +124,6 @@ export function setupSocket(server) {
       }
     );
 
-    // ------------------------------------------------------
-    // CURSOR UPDATE (REALTIME + DB)
-    // ------------------------------------------------------
     socket.on(
       "session:cursor:update",
       async ({ sessionId, clientId, userId, cursor }) => {
@@ -167,9 +159,6 @@ export function setupSocket(server) {
       }
     );
 
-    // ------------------------------------------------------
-    // CHAT STORAGE
-    // ------------------------------------------------------
     socket.on("chat:message", async (msg, ack) => {
       const { sessionId, userId, text } = msg;
 
@@ -193,9 +182,6 @@ export function setupSocket(server) {
       }
     });
 
-    // ------------------------------------------------------
-    // LOAD CHAT HISTORY
-    // ------------------------------------------------------
     socket.on("chat:getHistory", async ({ sessionId }, ack) => {
       try {
         const session = await Session.findOne({ sessionId });
@@ -208,9 +194,6 @@ export function setupSocket(server) {
       }
     });
 
-    // ------------------------------------------------------
-    // DISCONNECT
-    // ------------------------------------------------------
     socket.on("disconnect", () => {
       console.log("❌ Client disconnected:", socket.id);
     });

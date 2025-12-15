@@ -253,7 +253,7 @@ sessionSchema.methods.addParticipant = function(userId, role = 'collaborator') {
     throw new Error('Session is full');
   }
   
-  if (this.participants.find(p => p.userId.toString() === userId.toString())) {
+  if (this.participants?.find(p => p.userId?.toString() === userId.toString())) {
     throw new Error('User is already a participant');
   }
   
