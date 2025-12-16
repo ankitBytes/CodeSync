@@ -5,6 +5,12 @@ import {
   hideNotification,
 } from "../../redux/notificationSlice";
 import {
+  requestStarted,
+  requestFinished,
+  resetLoading,
+} from "../../redux/loadingSlice";
+import { useSocket } from "../../utils/socketContext";
+import {
   Box,
   Container,
   Grid,
@@ -46,6 +52,7 @@ import {
   Warning as WarningIcon,
   Info as InfoIcon,
 } from "@mui/icons-material";
+import { useNavigate } from "react-router-dom";
 
 // Mock data for demonstration
 const mockProblem = {
@@ -101,9 +108,10 @@ const SessionNavbar = () => {
   );
   const elementRef = useRef(null);
   const dispatch = useDispatch();
+  const socket = useSocket();
+  const navigate = useNavigate();
 
   const session = useSelector((state) => state.session.currentSession);
-  console.log(session);
 
   // Handle code execution
   const handleRunCode = () => {
@@ -179,6 +187,22 @@ const SessionNavbar = () => {
       // IE/Edge
       setIsFullscreen(false);
       document.msExitFullscreen();
+    }
+  };
+
+  const handleEndSession = () => {
+    try {
+      dispatch(requestStarted());
+      socket.emit("session:end", { sessionId: session.sessionId });
+    } catch (error) {
+      dispatch(showNotification({
+        open: true,
+        message: "Error ending session",
+        severity: "error",
+      }))
+      setTimeout(() => {
+        dispatch(hideNotification());
+      }, 2000);
     }
   };
 
@@ -274,6 +298,20 @@ const SessionNavbar = () => {
                 >
                   <SettingsIcon />
                 </IconButton>
+              </Tooltip>
+
+              <Tooltip title="End Session">
+                <Button
+                  variant="filled"
+                  onClick={() => handleEndSession()}
+                  sx={{
+                    backgroundColor: "#ff3333",
+                    color: "white",
+                    "&:hover": { backgroundColor: "#cc0000" },
+                  }}
+                >
+                  <Typography>End</Typography>
+                </Button>
               </Tooltip>
 
               <Tooltip title={isFullscreen ? "Exit Fullscreen" : "Fullscreen"}>

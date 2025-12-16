@@ -9,6 +9,7 @@ import {
   Typography,
 } from "@mui/material";
 import { useParams } from "react-router-dom";
+import { useNavigate } from "react-router-dom";
 import { apiUrl } from "../../utils/api.js";
 import { useDispatch, useSelector } from "react-redux";
 import { sessionCreated, clearSession } from "../../redux/sessionSlice.js";
@@ -18,6 +19,7 @@ import {
   requestFinished,
   resetLoading,
 } from "../../redux/loadingSlice.js";
+import { showNotification, hideNotification } from "../../redux/notificationSlice.js";
 
 // different components
 import SessionNavbar from "../../components/session/sessionNavbar";
@@ -37,6 +39,7 @@ const Session = () => {
   const [isSessionValid, setIsSessionValid] = useState(false);
   const socket = useSocket();
   const session = useSelector((state) => state.session.currentSession);
+  const navigate = useNavigate();
 
   // Close snackbar
   const handleCloseSnackbar = () => {
@@ -84,9 +87,6 @@ const Session = () => {
           }
         );
 
-        dispatch(requestFinished());
-        dispatch(resetLoading());
-
         setSnackbar({
           open: true,
           severity: "success",
@@ -95,6 +95,9 @@ const Session = () => {
         setTimeout(() => {
           dispatch(hideNotification());
         }, 2000);
+
+        dispatch(requestFinished());
+        dispatch(resetLoading());
       } catch (error) {
         dispatch(clearSession());
 
@@ -120,6 +123,30 @@ const Session = () => {
       }
     };
   }, [sessionId, dispatch]);
+
+  useEffect(() => {
+    const handleSessionEnded = ({ reason }) => {
+      if (!socket) return;
+      dispatch(
+        showNotification({
+          open: true,
+          message: "Session ended by creator",
+          severity: "info",
+        })
+      );
+
+      dispatch(requestFinished());
+      dispatch(resetLoading());
+
+      navigate("/");
+    };
+
+    socket.on("session:ended", handleSessionEnded);
+
+    return () => {
+      socket.off("session:ended", handleSessionEnded);
+    };
+  }, [navigate, dispatch]);
 
   return (
     <Box

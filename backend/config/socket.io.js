@@ -4,8 +4,8 @@ import User from "../models/User.js";
 import logger from "../utils/logger.js";
 import { SocketAuthMiddleware } from "../middleware/authMiddleware.js";
 
-const activeSessions = {};   // in-memory live state for fast sync
-const chatBuffer = {};       // in-memory chat cache (optional)
+const activeSessions = {}; // in-memory live state for fast sync
+const chatBuffer = {}; // in-memory chat cache (optional)
 
 export function setupSocket(server) {
   const io = new Server(server, {
@@ -13,11 +13,11 @@ export function setupSocket(server) {
       origin: [
         process.env.CLIENT_URL,
         "http://localhost:5173",
-        "http://127.0.0.1:5173"
+        "http://127.0.0.1:5173",
       ],
-      credentials: true
+      credentials: true,
     },
-    transports: ["websocket"]
+    transports: ["websocket"],
   });
 
   io.use(SocketAuthMiddleware);
@@ -75,28 +75,50 @@ export function setupSocket(server) {
       }
     });
 
-    socket.on("session:leave", async ({ sessionId, clientId, userId }) => {
+    socket.on("session:leave", async ({ sessionId }) => {
+      const userId = socket.user.id;
       try {
+
         socket.leave(sessionId);
 
         const session = await Session.findOne({ sessionId });
-        if (session) {
-          await session.removeParticipant(userId);
-        }
+        if (!session) return;
 
-        if (activeSessions[sessionId]) {
-          delete activeSessions[sessionId].participants[clientId];
+        await session.removeParticipant(userId);
 
-          io.to(sessionId).emit("session:participants", {
-            participants: Object.values(activeSessions[sessionId].participants),
-          });
-        }
+        // Send ONLY active participants
+        const activeParticipants = session.participants.filter(
+          (p) => p.isActive === true
+        );
 
-        console.log(`🚪 ${clientId} left ${sessionId}`);
+        io.to(sessionId).emit("session:participants", {
+          participants: activeParticipants,
+        });
       } catch (err) {
         console.error("Leave error:", err);
       }
     });
+
+    socket.on("session:end", async ({ sessionId }) => {
+      const userId = socket.user.id;
+      try {
+        
+        const session = await Session.findOne({ sessionId });
+        if (!session) return;
+
+        await session.endSessionByCreator(userId);
+
+        io.to(sessionId).emit("session:ended", {
+          sessionId,
+          reason: "session ended by creator",
+        });
+
+        const sockets = await io.in(sessionId).fetchSockets();
+        sockets.forEach((s) => s.leave(sessionId));
+      } catch (error) {
+        logger.error("End session error:", error.message);
+      }
+    })
 
     socket.on(
       "session:code:change",
