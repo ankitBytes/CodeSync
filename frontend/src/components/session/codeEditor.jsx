@@ -1,33 +1,20 @@
 import React, { useState, useEffect, useRef } from "react";
 import Editor from "@monaco-editor/react";
-import { io } from "socket.io-client";
+import { useSocket } from "../../utils/socketContext";
 import { useDispatch, useSelector } from "react-redux";
-import { showNotification, hideNotification } from "../../redux/notificationSlice";
+import {
+  showNotification,
+  hideNotification,
+} from "../../redux/notificationSlice";
 import {
   Box,
-  Container,
-  Grid,
-  Stack,
   Typography,
   Paper,
-  Divider,
-  IconButton,
-  Tooltip,
   Chip,
-  Avatar,
-  AvatarGroup,
-  Button,
-  Dialog,
-  DialogTitle,
-  DialogContent,
-  DialogActions,
-  TextField,
   FormControl,
   InputLabel,
   Select,
   MenuItem,
-  Alert,
-  Snackbar,
 } from "@mui/material";
 import {
   PlayArrow as RunIcon,
@@ -90,133 +77,31 @@ You can return the answer in any order.`,
   },
 };
 
-const mockChatMessages = [
-  {
-    id: 1,
-    user: "Alice",
-    message: "I think we should use a hash map approach",
-    timestamp: "2:30 PM",
-    avatar: "A",
-  },
-  {
-    id: 2,
-    user: "Bob",
-    message: "Good idea! That would give us O(n) time complexity",
-    timestamp: "2:32 PM",
-    avatar: "B",
-  },
-  {
-    id: 3,
-    user: "You",
-    message: "Let me implement that solution",
-    timestamp: "2:35 PM",
-    avatar: "Y",
-  },
-];
-
-const mockTestCases = [
-  {
-    id: 1,
-    input: "[2,7,11,15], 9",
-    expectedOutput: "[0,1]",
-    actualOutput: "[0,1]",
-    status: "passed",
-  },
-  {
-    id: 2,
-    input: "[3,2,4], 6",
-    expectedOutput: "[1,2]",
-    actualOutput: "[1,2]",
-    status: "passed",
-  },
-  {
-    id: 3,
-    input: "[3,3], 6",
-    expectedOutput: "[0,1]",
-    actualOutput: "[0,1]",
-    status: "passed",
-  },
-];
 const CodeEditor = () => {
   const [code, setCode] = useState(mockProblem.starterCode.javascript);
-  const [socket, setSocket] = useState(null);
   const [language, setLanguage] = useState("javascript");
-  const [isRunning, setIsRunning] = useState(false);
-  const [isFullscreen, setIsFullscreen] = useState(false);
-  const [showSettings, setShowSettings] = useState(false);
-  const [showShareDialog, setShowShareDialog] = useState(false);
-  const [sessionLink, setSessionLink] = useState(
-    "https://codesync.com/session/abc123"
-  );
-  const [chatMessage, setChatMessage] = useState("");
-  const [testResults] = useState(mockTestCases);
-  const [snackbar, setSnackbar] = useState({
-    open: false,
-    message: "",
-    severity: "info",
-  });
   const elementRef = useRef(null);
+  const isRemoteUpdate = useRef(false);
+  const sessionId = useSelector(
+    (state) => state.session.currentSession?.sessionId
+  );
+  const userId = useSelector((state) => state.user.currentUser?.id);
   const dispatch = useDispatch();
+  const socket = useSocket();
 
-  // Handle code execution
-  const handleRunCode = () => {
-    setIsRunning(true);
-    // Simulate code execution
-    setTimeout(() => {
-      setIsRunning(false);
-      dispatch(showNotification({
-        message: "Code executed successfully!",
-        severity: "success",
-      }));
-    }, 2000);
-    setTimeout(() => {
-      dispatch(hideNotification());
-    }, 3000);
-  };
+  useEffect(() => {
+    if (!socket || !sessionId) return;
 
-  // Handle code save
-  const handleSaveCode = () => {
-    dispatch(showNotification({
-      message: "Code saved successfully!",
-      severity: "success",
-    }));
-    setTimeout(() => {
-      dispatch(hideNotification());
-    }, 3000);
-  };
+    socket.on("session:code:update", ({ code, language }) => {
+      isRemoteUpdate.current = true;
+      setCode(code);
+      setLanguage(language);
+    });
 
-  // Handle share session
-  const handleShareSession = () => {
-    navigator.clipboard.writeText(sessionLink);
-    dispatch(showNotification({
-      open: true,
-      message: "Session link copied to clipboard!",
-      severity: "success",
-    }));
-    setTimeout(() => {
-      dispatch(hideNotification());
-    }, 3000);
-    setShowShareDialog(false);
-  };
-
-  // Handle chat message
-  const handleSendMessage = () => {
-    if (chatMessage.trim()) {
-      // Add message to chat
-      setChatMessage("");
-      setSnackbar({
-        open: true,
-        message: "Message sent!",
-        severity: "info",
-      });
-    }
-  };
-
-  // Close snackbar
-  const handleCloseSnackbar = () => {
-    setSnackbar({ ...snackbar, open: false });
-  };
-  
+    return () => {
+      socket.off("session:code:update");
+    };
+  }, [socket]);
 
   return (
     <Paper
@@ -281,14 +166,22 @@ const CodeEditor = () => {
 
       <Box sx={{ flex: 1, p: 2, height: "100%", overflow: "hidden" }}>
         <Editor
-          defaultLanguage="javascript"
-          theme="vs-dark"
-          height={"100%"}
           value={code}
-          options={{
-            minimap: { enabled: false },
-            fontSize: 14,
-            wordWrap: "on",
+          language={language}
+          theme="vs-dark"
+          onChange={(value) => {
+            setCode(value);
+            console.log("Code changed:", value);
+            if (isRemoteUpdate.current) {
+              isRemoteUpdate.current = false;
+              return;
+            }
+            socket.emit("session:code:change", {
+              sessionId,
+              userId,
+              code: value,
+              language,
+            });
           }}
         />
       </Box>

@@ -8,10 +8,6 @@ export const SocketProvider = ({ children }) => {
 
   useEffect(() => {
     socket.connect();
-
-    return () => {
-        socket.disconnect();
-    }
   }, [socket])
 
   return (

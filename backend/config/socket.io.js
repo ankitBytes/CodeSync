@@ -55,6 +55,7 @@ export function setupSocket(server) {
         activeSessions[sessionId].participants[userId] = {
           userId,
           name: name || "Anonymous",
+          socketId: socket.id,
         };
 
         ack?.({
@@ -78,7 +79,6 @@ export function setupSocket(server) {
     socket.on("session:leave", async ({ sessionId }) => {
       const userId = socket.user.id;
       try {
-
         socket.leave(sessionId);
 
         const session = await Session.findOne({ sessionId });
@@ -102,7 +102,6 @@ export function setupSocket(server) {
     socket.on("session:end", async ({ sessionId }) => {
       const userId = socket.user.id;
       try {
-        
         const session = await Session.findOne({ sessionId });
         if (!session) return;
 
@@ -118,18 +117,21 @@ export function setupSocket(server) {
       } catch (error) {
         logger.error("End session error:", error.message);
       }
-    })
+    });
 
     socket.on(
       "session:code:change",
-      async ({ sessionId, clientId, userId, code, language }) => {
+      async ({ sessionId, userId, code, language }) => {
         try {
           const session = await Session.findOne({ sessionId });
           if (!session) return;
 
-          // Update in database (versioned)
-          await session.updateCode(code, userId);
+          // logger.info(`Code change: ${code}`);
+          // logger.info(`Language change: ${language}`);
+          // logger.info(`Active session: ${sessionId}`);
 
+          // Update in database (versioned)
+          // await session.updateCode(code, userId);
           // Update live state
           activeSessions[sessionId].code = code;
           activeSessions[sessionId].language = language;
@@ -138,8 +140,14 @@ export function setupSocket(server) {
           socket.to(sessionId).emit("session:code:update", {
             code,
             language,
-            sourceClientId: clientId,
+            sourceClientId: userId,
           });
+          console.log(
+            "📤 Broadcasting code update to room",
+            sessionId,
+            "excluding",
+            socket.id
+          );
         } catch (err) {
           console.error("Code update error:", err);
         }
@@ -217,6 +225,19 @@ export function setupSocket(server) {
     });
 
     socket.on("disconnect", () => {
+      for (const sessionId in activeSessions) {
+        const participants = activeSessions[sessionId].participants;
+
+        for (const userId in participants) {
+          if (participants[userId].socketId === socket.id) {
+            delete participants[userId];
+          }
+        }
+
+        if (Object.keys(participants).length === 0) {
+          delete activeSessions[sessionId];
+        }
+      }
       console.log("❌ Client disconnected:", socket.id);
     });
   });
