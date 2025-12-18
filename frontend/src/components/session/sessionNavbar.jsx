@@ -10,6 +10,8 @@ import {
   resetLoading,
 } from "../../redux/loadingSlice";
 import { useSocket } from "../../utils/socketContext";
+import { updateParticipants } from "../../redux/sessionSlice";
+import { useEffect } from "react";
 import {
   Box,
   Container,
@@ -112,6 +114,7 @@ const SessionNavbar = () => {
   const navigate = useNavigate();
 
   const session = useSelector((state) => state.session.currentSession);
+  console.log("Session Navbar - Participants:", session?.participants || []);
 
   // Handle code execution
   const handleRunCode = () => {
@@ -195,11 +198,13 @@ const SessionNavbar = () => {
       dispatch(requestStarted());
       socket.emit("session:end", { sessionId: session.sessionId });
     } catch (error) {
-      dispatch(showNotification({
-        open: true,
-        message: "Error ending session",
-        severity: "error",
-      }))
+      dispatch(
+        showNotification({
+          open: true,
+          message: "Error ending session",
+          severity: "error",
+        })
+      );
       setTimeout(() => {
         dispatch(hideNotification());
       }, 2000);
@@ -256,7 +261,7 @@ const SessionNavbar = () => {
                 max={3}
                 sx={{ "& .MuiAvatar-root": { width: 32, height: 32 } }}
               >
-                {session.participants.map((participant, index) => (
+                {session?.participants?.map((participant, index) => (
                   <Avatar
                     key={index}
                     sx={{ bgcolor: "#00ff88", color: "#000" }}

@@ -1,4 +1,4 @@
-import React, { useState, useEffect, use } from "react";
+import React, { useState, useEffect, useRef } from "react";
 import {
   Box,
   Container,
@@ -12,14 +12,21 @@ import { useParams } from "react-router-dom";
 import { useNavigate } from "react-router-dom";
 import { apiUrl } from "../../utils/api.js";
 import { useDispatch, useSelector } from "react-redux";
-import { sessionCreated, clearSession } from "../../redux/sessionSlice.js";
+import {
+  sessionCreated,
+  clearSession,
+  updateParticipants,
+} from "../../redux/sessionSlice.js";
 import { useSocket } from "../../utils/socketContext.jsx";
 import {
   requestStarted,
   requestFinished,
   resetLoading,
 } from "../../redux/loadingSlice.js";
-import { showNotification, hideNotification } from "../../redux/notificationSlice.js";
+import {
+  showNotification,
+  hideNotification,
+} from "../../redux/notificationSlice.js";
 
 // different components
 import SessionNavbar from "../../components/session/sessionNavbar";
@@ -40,6 +47,7 @@ const Session = () => {
   const socket = useSocket();
   const session = useSelector((state) => state.session.currentSession);
   const navigate = useNavigate();
+  const prevParticipantsRef = useRef([]);
 
   // Close snackbar
   const handleCloseSnackbar = () => {
@@ -147,6 +155,40 @@ const Session = () => {
       socket.off("session:ended", handleSessionEnded);
     };
   }, [navigate, dispatch]);
+
+  useEffect(() => {
+    if (!socket) return;
+
+    const handleParticipantsUpdate = ({ participants }) => {
+      const prevParticipants = prevParticipantsRef.current;
+
+      const newJoins = participants.filter(
+        (p) => !prevParticipants.some((prev) => prev.userId === p.userId)
+      );
+
+      if (newJoins.length > 0) {
+        newJoins.forEach((p) => {
+          dispatch(
+            showNotification({
+              open: true,
+              message: `${p.name || "Someone"} joined the session`,
+              severity: "info",
+            })
+          );
+        });
+      }
+
+      dispatch(updateParticipants(participants));
+
+      prevParticipantsRef.current = participants;
+    };
+
+    socket.on("session:participants", handleParticipantsUpdate);
+
+    return () => {
+      socket.off("session:participants", handleParticipantsUpdate);
+    };
+  }, [socket, dispatch]);
 
   return (
     <Box

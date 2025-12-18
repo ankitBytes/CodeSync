@@ -52,7 +52,7 @@ export function setupSocket(server) {
           };
         }
 
-        activeSessions[sessionId].participants[clientId] = {
+        activeSessions[sessionId].participants[userId] = {
           userId,
           name: name || "Anonymous",
         };
