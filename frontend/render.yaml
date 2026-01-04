@@ -1,7 +1,6 @@
 services:
-  - type: web
+  - type: static
     name: codesync-frontend
-    env: static
     staticPublishPath: dist
     routes:
       - type: rewrite
